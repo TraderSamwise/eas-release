@@ -1,0 +1,52 @@
+{
+  "name": "@tradersamwise/eas-release",
+  "version": "0.1.0",
+  "description": "Small release CLI for Sam's Expo/EAS apps",
+  "type": "module",
+  "bin": {
+    "eas-release": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "yarn typecheck && yarn test && yarn build",
+    "prepack": "yarn build"
+  },
+  "keywords": [
+    "expo",
+    "eas",
+    "release"
+  ],
+  "author": "Sam Steady",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TraderSamwise/eas-release.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TraderSamwise/eas-release/issues"
+  },
+  "homepage": "https://github.com/TraderSamwise/eas-release#readme",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "commander": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "packageManager": "yarn@1.22.21"
+}

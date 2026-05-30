@@ -1,0 +1,9 @@
+{
+  "versionFile": "lib/version.ts",
+  "native": {
+    "ios": {
+      "infoPlist": "ios/demo/Info.plist",
+      "pbxproj": "ios/demo.xcodeproj/project.pbxproj"
+    }
+  }
+}
