@@ -4,14 +4,14 @@
   "description": "Small release CLI for Sam's Expo/EAS apps",
   "type": "module",
   "bin": {
-    "eas-release": "./dist/cli.js"
+    "eas-release": "dist/cli.js"
   },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc && chmod +x dist/cli.js",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
