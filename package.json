@@ -1,6 +1,6 @@
 {
   "name": "@tradersamwise/eas-release",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Small release CLI for Sam's Expo/EAS apps",
   "type": "module",
   "bin": {

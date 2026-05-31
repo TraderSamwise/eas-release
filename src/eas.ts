@@ -28,7 +28,7 @@ export function getEnvironment(config: ResolvedConfig, target: ReleaseTarget) {
 }
 
 export function runBuild(config: ResolvedConfig, target: ReleaseTarget, options: BuildOptions = {}) {
-  runPreflight(config, config.beforeBuildCommands);
+  runPreflight(config, target, config.beforeBuildCommands);
   const profile = getProfile(config, target);
   const platform = options.platform ?? config.defaultBuildPlatform;
   const autoSubmit = options.autoSubmit ?? config.autoSubmit;
@@ -43,7 +43,7 @@ export function runBuild(config: ResolvedConfig, target: ReleaseTarget, options:
 }
 
 export function runUpdate(config: ResolvedConfig, target: ReleaseTarget, options: UpdateOptions = {}) {
-  runPreflight(config, config.beforeUpdateCommands);
+  runPreflight(config, target, config.beforeUpdateCommands);
   const channel = getChannel(config, target);
   const platform = options.platform ?? config.defaultUpdatePlatform;
   const environment = getEnvironment(config, target);
@@ -57,13 +57,13 @@ export function runUpdate(config: ResolvedConfig, target: ReleaseTarget, options
   runYarn(args, config.cwd);
 }
 
-function runPreflight(config: ResolvedConfig, commands: string[]) {
+function runPreflight(config: ResolvedConfig, target: ReleaseTarget, commands: string[]) {
   checkRequiredEnv(config);
   if (config.checkReleaseEnvCommand) {
-    runShell(config.checkReleaseEnvCommand, config.cwd);
+    runShell(formatCommand(config.checkReleaseEnvCommand, target), config.cwd);
   }
   for (const command of commands) {
-    runShell(command, config.cwd);
+    runShell(formatCommand(command, target), config.cwd);
   }
 }
 
@@ -86,4 +86,8 @@ function runShell(command: string, cwd: string) {
   if (result.status !== 0) {
     throw new Error(`${command} failed`);
   }
+}
+
+function formatCommand(command: string, target: ReleaseTarget) {
+  return command.replaceAll("{target}", target);
 }
