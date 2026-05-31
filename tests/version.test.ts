@@ -44,6 +44,24 @@ describe("version management", () => {
     expect(committed).toContain("ios/demo.xcodeproj/project.pbxproj");
     expect(readFileSync(join(cwd, "ios/demo.xcodeproj/project.pbxproj"), "utf8")).toContain("CURRENT_PROJECT_VERSION = 3;");
   });
+
+  it("updates tracked Android versionCode when syncing native build versions", () => {
+    const cwd = copyFixture("tracked-android");
+    initRepo(cwd);
+
+    const config = loadConfig(cwd);
+    const current = readVersion(config);
+    backupVersionFiles(config);
+    writeVersion(config, { ...current, buildNumber: 3, otaVersion: 0 });
+    updateNativeVersion(config, 3);
+    commitVersion(config, "chore: release Build 3");
+    cleanupBackups(config);
+
+    const committed = git(cwd, ["show", "--name-only", "--format=", "HEAD"]).stdout.trim().split("\n");
+    expect(committed).toContain("lib/version.ts");
+    expect(committed).toContain("android/app/build.gradle");
+    expect(readFileSync(join(cwd, "android/app/build.gradle"), "utf8")).toContain("versionCode 3");
+  });
 });
 
 function copyFixture(name: string) {

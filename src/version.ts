@@ -17,10 +17,10 @@ export function readVersion(config: ResolvedConfig): VersionInfo {
   }
 
   const source = readFileSync(file, "utf8");
-  const version = matchString(source, /version:\s*"([^"]+)"/, "version");
+  const version = matchString(source, /version:\s*["']([^"']+)["']/, "version");
   const buildNumber = matchNumber(source, /buildNumber:\s*([0-9]+)/, "buildNumber");
   const otaVersion = matchNumber(source, /otaVersion:\s*([0-9]+)/, "otaVersion");
-  const channel = matchString(source, /channel:\s*"([^"]+)"/, "channel");
+  const channel = matchString(source, /channel:\s*["']([^"']+)["']/, "channel");
   return { version, buildNumber, otaVersion, channel };
 }
 
@@ -73,6 +73,12 @@ export function updateNativeVersion(config: ResolvedConfig, buildNumber: number)
     const source = readFileSync(path, "utf8");
     writeFileSync(path, source.replace(/CURRENT_PROJECT_VERSION = [0-9]+;/g, `CURRENT_PROJECT_VERSION = ${buildNumber};`));
   }
+
+  if (config.buildGradle && existsSync(resolveInCwd(config, config.buildGradle))) {
+    const path = resolveInCwd(config, config.buildGradle);
+    const source = readFileSync(path, "utf8");
+    writeFileSync(path, source.replace(/versionCode [0-9]+/g, `versionCode ${buildNumber}`));
+  }
 }
 
 export function backupVersionFiles(config: ResolvedConfig) {
@@ -118,7 +124,7 @@ export function commitVersion(config: ResolvedConfig, message: string) {
 function versionManagedFiles(config: ResolvedConfig, includeNativeGenerated: boolean) {
   const files = [config.versionFile];
   if (config.versionJsFile) files.push(config.versionJsFile);
-  for (const file of [config.infoPlist, config.pbxproj]) {
+  for (const file of [config.infoPlist, config.pbxproj, config.buildGradle]) {
     if (file && (includeNativeGenerated || isTracked(file, config.cwd))) {
       files.push(file);
     }

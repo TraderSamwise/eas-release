@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { loadConfig } from "./config.js";
-import { getChannel, ReleaseTarget, runBuild, runUpdate } from "./eas.js";
+import { getChannel, Platform, ReleaseTarget, runBuild, runUpdate } from "./eas.js";
 import {
   backupVersionFiles,
   cleanupBackups,
@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name("eas-release")
   .description("Small release CLI for Sam's Expo/EAS apps")
-  .version("0.1.0");
+  .version("0.1.1");
 
 program.command("current").action(() => {
   const config = loadConfig();
@@ -75,6 +75,21 @@ program
     runVersionUpdate(config, next, `chore: set version to Build ${next.buildNumber}.${next.otaVersion} (${next.channel})`, true);
   });
 
+program.command("sync").action(() => {
+  const config = loadConfig();
+  const current = readVersion(config);
+  backupVersionFiles(config);
+  try {
+    writeVersion(config, current);
+    updateNativeVersion(config, current.buildNumber);
+    cleanupBackups(config);
+    console.log(`Synced native files to Build ${current.buildNumber}`);
+  } catch (error) {
+    cleanupBackups(config);
+    throw error;
+  }
+});
+
 program.command("rollback").action(() => {
   rollback(loadConfig());
 });
@@ -82,16 +97,25 @@ program.command("rollback").action(() => {
 program
   .command("build")
   .argument("[target]", "testflight or production", "testflight")
-  .option("--platform <platform>", "ios, android, or all", "ios")
-  .action((targetArg: string, options: { platform: string }) => {
-    runBuild(loadConfig(), parseTarget(targetArg), parsePlatform(options.platform));
+  .option("--platform <platform>", "ios, android, or all")
+  .option("--no-auto-submit", "do not pass --auto-submit to EAS")
+  .action((targetArg: string, options: { platform?: string; autoSubmit: boolean }) => {
+    runBuild(loadConfig(), parseTarget(targetArg), {
+      platform: options.platform ? parsePlatform(options.platform) : undefined,
+      autoSubmit: options.autoSubmit,
+    });
   });
 
 program
   .command("update")
   .argument("[target]", "testflight or production", "testflight")
-  .action((targetArg: string) => {
-    runUpdate(loadConfig(), parseTarget(targetArg));
+  .option("--platform <platform>", "ios, android, or all")
+  .option("--clear-cache", "pass --clear-cache to EAS")
+  .action((targetArg: string, options: { platform?: string; clearCache?: boolean }) => {
+    runUpdate(loadConfig(), parseTarget(targetArg), {
+      platform: options.platform ? parsePlatform(options.platform) : undefined,
+      clearCache: options.clearCache,
+    });
   });
 
 program.parseAsync().catch((error: unknown) => {
@@ -136,7 +160,7 @@ function parseTarget(value: string): ReleaseTarget {
   throw new Error(`Unknown target: ${value}`);
 }
 
-function parsePlatform(value: string) {
+function parsePlatform(value: string): Platform {
   if (value === "ios" || value === "android" || value === "all") return value;
   throw new Error(`Unknown platform: ${value}`);
 }

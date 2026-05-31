@@ -1,0 +1,8 @@
+{
+  "versionFile": "lib/version.ts",
+  "native": {
+    "android": {
+      "buildGradle": "android/app/build.gradle"
+    }
+  }
+}
