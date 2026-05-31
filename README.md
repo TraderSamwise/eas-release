@@ -10,6 +10,20 @@ The version file format is intentionally standardized across apps. If an app dif
 yarn add -D @tradersamwise/eas-release
 ```
 
+## Release
+
+Releases are tag-driven. Run one of these from `main`:
+
+```bash
+yarn release:patch
+yarn release:minor
+yarn release:major
+```
+
+The `v*` tag triggers GitHub Actions, which verifies the package, checks that
+`package.json` matches the tag, and publishes to npm with provenance through
+npm Trusted Publishing.
+
 ## Scripts
 
 ```json
