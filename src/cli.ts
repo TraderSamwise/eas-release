@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name("eas-release")
   .description("Small release CLI for Sam's Expo/EAS apps")
-  .version("0.1.1");
+  .version("0.1.2");
 
 program.command("current").action(() => {
   const config = loadConfig();
@@ -98,10 +98,13 @@ program
   .command("build")
   .argument("[target]", "testflight or production", "testflight")
   .option("--platform <platform>", "ios, android, or all")
+  .option("--ios", "build iOS")
+  .option("--android", "build Android")
+  .option("--all", "build iOS and Android")
   .option("--no-auto-submit", "do not pass --auto-submit to EAS")
-  .action((targetArg: string, options: { platform?: string; autoSubmit: boolean }) => {
+  .action((targetArg: string, options: PlatformOptions & { autoSubmit: boolean }) => {
     runBuild(loadConfig(), parseTarget(targetArg), {
-      platform: options.platform ? parsePlatform(options.platform) : undefined,
+      platform: resolvePlatformOption(options),
       autoSubmit: options.autoSubmit,
     });
   });
@@ -110,10 +113,13 @@ program
   .command("update")
   .argument("[target]", "testflight or production", "testflight")
   .option("--platform <platform>", "ios, android, or all")
+  .option("--ios", "update iOS")
+  .option("--android", "update Android")
+  .option("--all", "update iOS and Android")
   .option("--clear-cache", "pass --clear-cache to EAS")
-  .action((targetArg: string, options: { platform?: string; clearCache?: boolean }) => {
+  .action((targetArg: string, options: PlatformOptions & { clearCache?: boolean }) => {
     runUpdate(loadConfig(), parseTarget(targetArg), {
-      platform: options.platform ? parsePlatform(options.platform) : undefined,
+      platform: resolvePlatformOption(options),
       clearCache: options.clearCache,
     });
   });
@@ -163,4 +169,19 @@ function parseTarget(value: string): ReleaseTarget {
 function parsePlatform(value: string): Platform {
   if (value === "ios" || value === "android" || value === "all") return value;
   throw new Error(`Unknown platform: ${value}`);
+}
+
+type PlatformOptions = {
+  platform?: string;
+  ios?: boolean;
+  android?: boolean;
+  all?: boolean;
+};
+
+function resolvePlatformOption(options: PlatformOptions): Platform | undefined {
+  if (options.platform) return parsePlatform(options.platform);
+  if (options.ios) return "ios";
+  if (options.android) return "android";
+  if (options.all) return "all";
+  return undefined;
 }
