@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { ResolvedConfig } from "./config.js";
 import { checkRequiredEnv } from "./env.js";
+import { readVersion } from "./version.js";
 
 export type ReleaseTarget = "testflight" | "production";
 export type Platform = "ios" | "android" | "all";
@@ -47,7 +48,16 @@ export function runUpdate(config: ResolvedConfig, target: ReleaseTarget, options
   const channel = getChannel(config, target);
   const platform = options.platform ?? config.defaultUpdatePlatform;
   const environment = getEnvironment(config, target);
-  const args = ["eas", "update", "--branch", channel, "--platform", platform];
+  const version = readVersion(config);
+  if (version.channel !== channel) {
+    throw new Error(
+      `Refusing to publish OTA to '${channel}' while ${config.versionFile} channel is '${version.channel}'. Run version:bump-ota ${target} first, or set the version channel intentionally.`,
+    );
+  }
+
+  const platformLabel = platform === "all" ? "OTA Update" : `${platform.toUpperCase()} OTA Update`;
+  const message = `${platformLabel} v${version.otaVersion} for Build ${version.buildNumber} (${target === "production" ? "Production" : "TestFlight"})`;
+  const args = ["eas", "update", "--branch", channel, "--platform", platform, "--message", message];
   if (environment) {
     args.push("--environment", environment);
   }

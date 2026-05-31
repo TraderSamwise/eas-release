@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name("eas-release")
   .description("Small release CLI for Sam's Expo/EAS apps")
-  .version("0.1.3");
+  .version("0.1.4");
 
 program.command("current").action(() => {
   const config = loadConfig();
