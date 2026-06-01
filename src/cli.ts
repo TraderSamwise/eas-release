@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { loadConfig } from "./config.js";
 import { getChannel, Platform, ReleaseTarget, runBuild, runUpdate } from "./eas.js";
+import { assertOtaRuntimeStable, readExpoRuntimeVersion } from "./runtime.js";
 import {
   backupVersionFiles,
   cleanupBackups,
@@ -137,17 +138,21 @@ function runVersionUpdate(
   updateNative: boolean,
 ) {
   const current = readVersion(config);
+  const runtimeBefore = updateNative ? undefined : readExpoRuntimeVersion(config.cwd);
   console.log(`Current version: ${current.version} (${current.buildNumber}.${current.otaVersion})`);
   console.log(`New version: ${next.version} (${next.buildNumber}.${next.otaVersion})`);
   backupVersionFiles(config);
   try {
     writeVersion(config, next);
+    if (!updateNative) {
+      assertOtaRuntimeStable(runtimeBefore, readExpoRuntimeVersion(config.cwd));
+    }
     if (updateNative) updateNativeVersion(config, next.buildNumber);
     commitVersion(config, commitMessage);
     cleanupBackups(config);
     console.log("Version changes committed");
   } catch (error) {
-    cleanupBackups(config);
+    rollback(config);
     throw error;
   }
 }

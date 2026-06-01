@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
+import { assertOtaRuntimeStable, parseExpoRuntimeVersion } from "../src/runtime.js";
 import { backupVersionFiles, cleanupBackups, commitVersion, readVersion, updateNativeVersion, writeVersion } from "../src/version.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -61,6 +62,25 @@ describe("version management", () => {
     expect(committed).toContain("lib/version.ts");
     expect(committed).toContain("android/app/build.gradle");
     expect(readFileSync(join(cwd, "android/app/build.gradle"), "utf8")).toContain("versionCode 3");
+  });
+});
+
+describe("runtime guards", () => {
+  it("parses Expo runtimeVersion from config output", () => {
+    expect(parseExpoRuntimeVersion(JSON.stringify({ runtimeVersion: "1.0.0-2" }))).toBe("1.0.0-2");
+    expect(parseExpoRuntimeVersion("yarn run v1.22.21\n{}")).toBeUndefined();
+  });
+
+  it("allows OTA bumps when runtimeVersion is unchanged or unavailable", () => {
+    expect(() => assertOtaRuntimeStable("1.0.0-2", "1.0.0-2")).not.toThrow();
+    expect(() => assertOtaRuntimeStable(undefined, "1.0.0-2")).not.toThrow();
+    expect(() => assertOtaRuntimeStable("1.0.0-2", undefined)).not.toThrow();
+  });
+
+  it("rejects OTA bumps that change runtimeVersion", () => {
+    expect(() => assertOtaRuntimeStable("1.0.0-2", "1.0.0-3")).toThrow(
+      /OTA version bump changed Expo runtimeVersion/,
+    );
   });
 });
 
