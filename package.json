@@ -1,6 +1,6 @@
 {
   "name": "@tradersamwise/eas-release",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Small release CLI for Sam's Expo/EAS apps",
   "type": "module",
   "bin": {
@@ -40,7 +40,7 @@
   },
   "homepage": "https://github.com/TraderSamwise/eas-release#readme",
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "dependencies": {
     "commander": "^14.0.0"
