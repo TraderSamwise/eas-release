@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { createRequire } from "node:module";
 import { loadConfig } from "./config.js";
 import { getChannel, Platform, ReleaseTarget, runBuild, runUpdate } from "./eas.js";
 import { assertOtaRuntimeStable, readExpoRuntimeVersion } from "./runtime.js";
@@ -14,11 +15,13 @@ import {
 } from "./version.js";
 
 const program = new Command();
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json") as { version: string };
 
 program
   .name("eas-release")
   .description("Small release CLI for Sam's Expo/EAS apps")
-  .version("0.1.4");
+  .version(packageJson.version);
 
 program.command("current").action(() => {
   const config = loadConfig();
