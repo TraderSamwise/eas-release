@@ -1,4 +1,4 @@
-import { mkdtempSync, cpSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, cpSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -30,6 +30,9 @@ describe("version management", () => {
 
   it("includes tracked native files when bumping native build versions", () => {
     const cwd = copyFixture("tracked-ios");
+    if (process.platform !== "darwin") {
+      rmSync(join(cwd, "ios/demo/Info.plist"));
+    }
     initRepo(cwd);
 
     const config = loadConfig(cwd);
