@@ -43,6 +43,26 @@ npm Trusted Publishing.
 }
 ```
 
+## Workflow
+
+Two release paths, chosen by what changed. Always bump the version first, then ship.
+
+OTA update — JavaScript and asset changes only, delivered over the existing native build's Expo runtime:
+
+```bash
+yarn version:bump-ota && yarn update              # testflight
+yarn version:bump-ota && yarn update:production   # production
+```
+
+Native build — required whenever the native binary or its Expo runtime fingerprint changes:
+
+```bash
+yarn version:bump-build && yarn build:testflight    # testflight
+yarn version:bump-build && yarn build:production     # production
+```
+
+Decision rule: OTA covers JavaScript and assets. A native rebuild is required for native dependencies, Expo plugins, permissions/entitlements, icons, splash screens, build profiles, or any native configuration — anything that changes the native binary or its Expo runtime fingerprint. `bump-ota` enforces this: it aborts if the Expo runtime version changed since the last native build, because an OTA can only target the runtime already installed on the device. `bump-build` increments the build number, resets the OTA counter to 0, and updates native version files. Both commands commit the version file.
+
 ## Config
 
 Create `eas-release.config.json` in the app directory:
