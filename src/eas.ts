@@ -29,8 +29,10 @@ export function getEnvironment(config: ResolvedConfig, target: ReleaseTarget) {
 }
 
 export function runBuild(config: ResolvedConfig, target: ReleaseTarget, options: BuildOptions = {}) {
-  runPreflight(config, target, config.beforeBuildCommands);
   const profile = getProfile(config, target);
+  const channel = getChannel(config, target);
+  assertVersionChannel(config, channel, `build '${target}'`, `version:bump-build ${target}`);
+  runPreflight(config, target, config.beforeBuildCommands);
   const platform = options.platform ?? config.defaultBuildPlatform;
   const autoSubmit = options.autoSubmit ?? config.autoSubmit;
   const args = ["eas", "build", "--profile", profile];
@@ -44,16 +46,11 @@ export function runBuild(config: ResolvedConfig, target: ReleaseTarget, options:
 }
 
 export function runUpdate(config: ResolvedConfig, target: ReleaseTarget, options: UpdateOptions = {}) {
-  runPreflight(config, target, config.beforeUpdateCommands);
   const channel = getChannel(config, target);
   const platform = options.platform ?? config.defaultUpdatePlatform;
   const environment = getEnvironment(config, target);
-  const version = readVersion(config);
-  if (version.channel !== channel) {
-    throw new Error(
-      `Refusing to publish OTA to '${channel}' while ${config.versionFile} channel is '${version.channel}'. Run version:bump-ota ${target} first, or set the version channel intentionally.`,
-    );
-  }
+  const version = assertVersionChannel(config, channel, `publish OTA to '${channel}'`, `version:bump-ota ${target}`);
+  runPreflight(config, target, config.beforeUpdateCommands);
 
   const platformLabel = platform === "all" ? "OTA Update" : `${platform.toUpperCase()} OTA Update`;
   const message = `${platformLabel} v${version.otaVersion} for Build ${version.buildNumber} (${target === "production" ? "Production" : "TestFlight"})`;
@@ -65,6 +62,21 @@ export function runUpdate(config: ResolvedConfig, target: ReleaseTarget, options
     args.push("--clear-cache");
   }
   runYarn(args, config.cwd);
+}
+
+function assertVersionChannel(
+  config: ResolvedConfig,
+  expectedChannel: string,
+  action: string,
+  versionCommand: string,
+) {
+  const version = readVersion(config);
+  if (version.channel !== expectedChannel) {
+    throw new Error(
+      `Refusing to ${action} while ${config.versionFile} channel is '${version.channel}'. Run ${versionCommand} first, or set the version channel intentionally.`,
+    );
+  }
+  return version;
 }
 
 function runPreflight(config: ResolvedConfig, target: ReleaseTarget, commands: string[]) {
