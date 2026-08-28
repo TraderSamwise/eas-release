@@ -160,3 +160,24 @@ Each app needs its own, and none of it is shared between apps:
    SHA-1 for directly installed APKs.
 
 Keys live in a gitignored `credentials/` directory, never in the repo.
+
+### Version parity
+
+`buildNumber` is one counter shared by both platforms, and `runtimeVersion` is
+derived from it. Shipping a single platform therefore strands the other on an
+older runtime, where it silently stops receiving OTA updates.
+
+So when `defaultBuildPlatform` is `"all"`, building is all or nothing.
+`--platform ios` / `--platform android` are refused unless they *repair drift*
+that already exists - that is, the other platform has a finished build at the
+current build number and this one does not:
+
+```
+$ eas-release build testflight --platform android
+Refusing to build only android at Build 7: ios has no build at that number
+either, so this would strand ios on an older runtime and stop its OTA updates.
+Building is all or nothing - run `eas-release build testflight`.
+```
+
+Apps that are genuinely single-platform set `defaultBuildPlatform` to `"ios"` or
+`"android"` and are never subject to the check.

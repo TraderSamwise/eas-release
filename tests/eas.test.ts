@@ -115,3 +115,78 @@ function fixtureConfig(channel: string): ResolvedConfig {
     beforeUpdateCommands: [],
   };
 }
+
+describe("build parity", () => {
+  beforeEach(() => {
+    vi.mocked(spawnSync).mockClear();
+    vi.mocked(spawn).mockClear();
+    vi.mocked(spawn).mockImplementation((() => fakeChild(0)) as never);
+  });
+
+  /** `eas build:list --json` stub: which builds exist at which build number. */
+  function withFinishedBuilds(byPlatform: Record<string, string[]>) {
+    vi.mocked(spawnSync).mockImplementation(((cmd: string, args: string[]) => {
+      if (args?.includes("build:list")) {
+        const platform = args[args.indexOf("--platform") + 1];
+        const versions = byPlatform[platform] ?? [];
+        return {
+          status: 0,
+          stdout: JSON.stringify(
+            versions.map((appBuildVersion) => ({ appBuildVersion })),
+          ),
+        };
+      }
+      return { status: 0, stdout: "" };
+    }) as never);
+  }
+
+  function parityConfig() {
+    const config = fixtureConfig("testflight");
+    config.defaultBuildPlatform = "all";
+    return config;
+  }
+
+  it("refuses a single platform when neither platform has the build", async () => {
+    const config = parityConfig();
+    withFinishedBuilds({ ios: [], android: [] });
+
+    await expect(
+      runBuild(config, "testflight", { platform: "android" }),
+    ).rejects.toThrow(/strand ios on an older runtime/);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("refuses a single platform when both platforms already have the build", async () => {
+    const config = parityConfig();
+    withFinishedBuilds({ ios: ["2"], android: ["2"] });
+
+    await expect(
+      runBuild(config, "testflight", { platform: "android" }),
+    ).rejects.toThrow(/no drift to repair/);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("allows a single platform that repairs drift", async () => {
+    const config = parityConfig();
+    withFinishedBuilds({ ios: ["2"], android: [] });
+
+    await expect(
+      runBuild(config, "testflight", { platform: "android" }),
+    ).resolves.toBeUndefined();
+    expect(spawn).toHaveBeenCalledWith(
+      "yarn",
+      expect.arrayContaining(["--platform", "android"]),
+      expect.anything(),
+    );
+  });
+
+  it("never blocks an all-platform build", async () => {
+    const config = parityConfig();
+    withFinishedBuilds({ ios: [], android: [] });
+
+    await expect(
+      runBuild(config, "testflight", { platform: "all" }),
+    ).resolves.toBeUndefined();
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+});

@@ -64,6 +64,7 @@ export async function runBuild(
     platform === "all" ? [...PLATFORM_ORDER] : [platform];
 
   if (platforms.length === 1) {
+    assertRepairsDrift(config, target, platforms[0]);
     await buildPlatform(config, target, platforms[0], options, false);
     return;
   }
@@ -106,6 +107,68 @@ export async function runBuild(
       `${failed.map((result) => result.platform).join(", ")} failed; see summary above`,
     );
   }
+}
+
+/**
+ * Building is all or nothing. `buildNumber` is one counter shared by both
+ * platforms and it derives `runtimeVersion`, so shipping a single platform
+ * strands the other on an older runtime where it silently stops receiving OTA
+ * updates. A single-platform build is therefore allowed only when it repairs
+ * drift that already exists.
+ */
+function assertRepairsDrift(
+  config: ResolvedConfig,
+  target: ReleaseTarget,
+  platform: PlatformName,
+) {
+  if (config.defaultBuildPlatform !== "all") return;
+
+  const buildNumber = String(readVersion(config).buildNumber);
+  const other: PlatformName = platform === "ios" ? "android" : "ios";
+  const built = (item: PlatformName) =>
+    finishedBuildExists(config, item, buildNumber);
+
+  if (built(other) && !built(platform)) return;
+
+  const run = `eas-release build ${target}`;
+  throw new Error(
+    built(platform)
+      ? `Both platforms already have Build ${buildNumber}; there is no drift to repair. Building is all or nothing - run \`${run}\`.`
+      : `Refusing to build only ${platform} at Build ${buildNumber}: ${other} has no build at that number either, so this would strand ${other} on an older runtime and stop its OTA updates. Building is all or nothing - run \`${run}\`.`,
+  );
+}
+
+function finishedBuildExists(
+  config: ResolvedConfig,
+  platform: PlatformName,
+  buildNumber: string,
+) {
+  const result = spawnSync(
+    "yarn",
+    [
+      "--silent",
+      "eas",
+      "build:list",
+      "--platform",
+      platform,
+      "--status",
+      "finished",
+      "--limit",
+      "20",
+      "--json",
+      "--non-interactive",
+    ],
+    { cwd: config.cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (result.status !== 0) {
+    throw new Error(`eas build:list failed while checking ${platform} builds`);
+  }
+  const start = result.stdout.indexOf("[");
+  if (start === -1) return false;
+  const builds = JSON.parse(result.stdout.slice(start)) as {
+    appBuildVersion?: string;
+  }[];
+  return builds.some((build) => String(build.appBuildVersion) === buildNumber);
 }
 
 async function buildPlatform(
