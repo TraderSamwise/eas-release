@@ -161,6 +161,73 @@ Each app needs its own, and none of it is shared between apps:
 
 Keys live in a gitignored `credentials/` directory, never in the repo.
 
+Each step below has a failure mode that is silent or misleading, so they are
+written out in the order they bite.
+
+#### 1. Play developer account
+
+Needed even when you never intend to ship through Play: registering the package
+there is what satisfies **Android developer verification**, without which your
+own sideloaded APKs stop installing on certified devices (Brazil, Indonesia,
+Singapore and Thailand from 30 September 2026, wider later).
+
+Some app categories — crypto, banking, stock trading, health, VPN, government —
+can only reach production from an **organization** account. A personal account
+can still run internal testing for them.
+
+#### 2. Firebase App Distribution is the tester channel
+
+Play has no TestFlight. Internal testing ships through the ordinary Play Store,
+which never tells a tester a build exists or which one they are running.
+
+- Testers install **App Tester**, which is *not* in the Play Store — it installs
+  other apps, which Play's own Device and Network Abuse policy forbids. It comes
+  from the invite email as a sideload. Say so, or testers will hunt for it.
+- Distribute an **APK**. Firebase only accepts an AAB when the Firebase project
+  is linked to a Play developer account, and that link needs Owner on the
+  Firebase project — which Google refuses to grant an external account over the
+  API. Hence a separate APK profile rather than reusing the store AAB.
+- Limits: 500 testers per project, 200 per group, 1000 releases, and releases
+  expire after 150 days. Increases are free on request.
+
+#### 3. Service account keys on a Workspace org
+
+New Google Cloud orgs enforce `constraints/iam.disableServiceAccountKeyCreation`,
+so key creation fails outright. Grant yourself `roles/orgpolicy.policyAdmin` on
+the org, then:
+
+```sh
+gcloud resource-manager org-policies disable-enforce \
+  constraints/iam.disableServiceAccountKeyCreation --project <project>
+```
+
+The change takes a few minutes to propagate; key creation keeps failing until it
+does, with the same error. Retry rather than re-diagnose.
+
+#### 4. Google Sign-In on Android
+
+The most expensive part, because every failure looks like a different bug.
+
+- **Two OAuth clients**, not one. An Android client is bound to a single signing
+  certificate, so the Play **app signing** SHA-1 (Play installs) and the
+  **upload** key SHA-1 (Firebase/EAS APKs) need one each. The wrong one gives
+  *"<App> sent an invalid request"*.
+- **Enable custom URI scheme** on each Android client, under Advanced settings.
+  It is off by default and `expo-auth-session` needs it. Without it:
+  *"Custom URI scheme is not enabled for your Android client."*
+- **Register the package name as a scheme.** `expo-auth-session` redirects to
+  `${applicationId}:/oauthredirect`, so `android.scheme` must include the
+  package name, not just the app's own scheme. iOS is exempt because
+  `ASWebAuthenticationSession` intercepts the callback. Without it the browser
+  finishes and strands the user on google.com. Native change — needs a build.
+- **Add an `oauthredirect` route** if the app uses expo-router, or the redirect
+  renders "Unmatched Route". It must *pop*, not navigate: replacing the stack
+  unmounts the sign-in screen mid token-exchange and silently drops the first
+  attempt.
+- **Accept the Android client ID server-side.** ID tokens carry the Android
+  client ID as their audience; a backend that only allows the iOS and web client
+  IDs returns UNAUTHORIZED after a fully successful OAuth round trip.
+
 ### Version parity
 
 `buildNumber` is one counter shared by both platforms, and `runtimeVersion` is
