@@ -2,7 +2,8 @@
 import { Command } from "commander";
 import { createRequire } from "node:module";
 import { loadConfig } from "./config.js";
-import { getChannel, Platform, ReleaseTarget, runBuild, runUpdate } from "./eas.js";
+import { getChannel, getDistribution, Platform, ReleaseTarget, runBuild, runUpdate } from "./eas.js";
+import { distributeAndroid } from "./firebase.js";
 import { assertOtaRuntimeStable, readExpoRuntimeVersion } from "./runtime.js";
 import {
   backupVersionFiles,
@@ -106,11 +107,27 @@ program
   .option("--android", "build Android")
   .option("--all", "build iOS and Android")
   .option("--no-auto-submit", "do not pass --auto-submit to EAS")
-  .action((targetArg: string, options: PlatformOptions & { autoSubmit: boolean }) => {
-    runBuild(loadConfig(), parseTarget(targetArg), {
+  .action(async (targetArg: string, options: PlatformOptions & { autoSubmit: boolean }) => {
+    await runBuild(loadConfig(), parseTarget(targetArg), {
       platform: resolvePlatformOption(options),
       autoSubmit: options.autoSubmit,
     });
+  });
+
+program
+  .command("distribute")
+  .description("push the latest finished build to its tester channel")
+  .argument("[target]", "testflight or production", "testflight")
+  .action((targetArg: string) => {
+    const config = loadConfig();
+    const target = parseTarget(targetArg);
+    const firebase = getDistribution(config, target).android?.firebase;
+    if (!firebase) {
+      throw new Error(
+        `No distribute.${target}.android.firebase configured in eas-release.config.json`,
+      );
+    }
+    distributeAndroid(config, firebase);
   });
 
 program

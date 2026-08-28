@@ -1,6 +1,23 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+export type ReleaseTargetName = "testflight" | "production";
+export type PlatformName = "ios" | "android";
+
+export type FirebaseDistribution = {
+  appId: string;
+  project?: string;
+  groups?: string[];
+  testers?: string[];
+  serviceAccountKeyPath?: string;
+};
+
+export type PlatformDistribution = {
+  firebase?: FirebaseDistribution;
+};
+
+export type TargetDistribution = Partial<Record<PlatformName, PlatformDistribution>>;
+
 export type EasReleaseConfig = {
   versionFile?: string;
   versionJsFile?: string | false;
@@ -18,12 +35,23 @@ export type EasReleaseConfig = {
     productionProfile?: string;
     testflightChannel?: string;
     productionChannel?: string;
+    /**
+     * Per-platform profile overrides. Needed whenever one platform's tester
+     * artifact differs from the other's - an Android APK for Firebase App
+     * Distribution cannot come from the same profile as an iOS store build.
+     */
+    platformProfiles?: Partial<
+      Record<ReleaseTargetName, Partial<Record<PlatformName, string>>>
+    >;
     defaultBuildPlatform?: "ios" | "android" | "all";
     defaultUpdatePlatform?: "ios" | "android" | "all";
     autoSubmit?: boolean;
+    /** Build platforms concurrently when platform is "all". Defaults to true. */
+    parallelBuilds?: boolean;
     testflightEnvironment?: string;
     productionEnvironment?: string;
   };
+  distribute?: Partial<Record<ReleaseTargetName, TargetDistribution>>;
   env?: {
     required?: string[];
   };
@@ -45,11 +73,16 @@ export type ResolvedConfig = {
   productionProfile: string;
   testflightChannel: string;
   productionChannel: string;
+  platformProfiles: Partial<
+    Record<ReleaseTargetName, Partial<Record<PlatformName, string>>>
+  >;
   defaultBuildPlatform: "ios" | "android" | "all";
   defaultUpdatePlatform: "ios" | "android" | "all";
   autoSubmit: boolean;
+  parallelBuilds: boolean;
   testflightEnvironment?: string;
   productionEnvironment?: string;
+  distribute: Partial<Record<ReleaseTargetName, TargetDistribution>>;
   requiredEnv: string[];
   checkReleaseEnvCommand?: string;
   beforeBuildCommands: string[];
@@ -76,11 +109,14 @@ export function loadConfig(cwd = process.cwd()): ResolvedConfig {
     productionProfile: config.eas?.productionProfile ?? "production",
     testflightChannel: config.eas?.testflightChannel ?? "testflight",
     productionChannel: config.eas?.productionChannel ?? "production",
+    platformProfiles: config.eas?.platformProfiles ?? {},
     defaultBuildPlatform: config.eas?.defaultBuildPlatform ?? "ios",
     defaultUpdatePlatform: config.eas?.defaultUpdatePlatform ?? "ios",
     autoSubmit: config.eas?.autoSubmit ?? true,
+    parallelBuilds: config.eas?.parallelBuilds ?? true,
     testflightEnvironment: config.eas?.testflightEnvironment,
     productionEnvironment: config.eas?.productionEnvironment,
+    distribute: config.distribute ?? {},
     requiredEnv: config.env?.required ?? [],
     checkReleaseEnvCommand: config.commands?.checkReleaseEnv,
     beforeBuildCommands: config.commands?.beforeBuild ?? [],

@@ -96,3 +96,67 @@ Create `eas-release.config.json` in the app directory:
 ```
 
 Native files are committed only when they are tracked by Git. Generated ignored `ios/` directories are updated locally when present, but skipped during version commits.
+
+## Android tester distribution
+
+Google Play has no TestFlight. Internal testing ships through the ordinary Play
+Store, which never tells a tester that a new build exists or which build they
+are on. Firebase App Distribution is the Android peer of `--auto-submit`: it
+emails testers per release and lists builds with their numbers and notes.
+
+Because an APK bound for Firebase cannot come from the same EAS profile as an
+iOS store build, platforms can take different profiles:
+
+```json
+{
+  "eas": {
+    "platformProfiles": {
+      "testflight": { "android": "testflight-android" }
+    },
+    "defaultBuildPlatform": "all",
+    "defaultUpdatePlatform": "all",
+    "parallelBuilds": true
+  },
+  "distribute": {
+    "testflight": {
+      "android": {
+        "firebase": {
+          "appId": "1:000000000000:android:abcdef",
+          "project": "my-firebase-project",
+          "groups": ["my-team"],
+          "serviceAccountKeyPath": "credentials/firebase-distribute.json"
+        }
+      }
+    }
+  }
+}
+```
+
+A platform with a `distribute` entry never receives `--auto-submit`; its build
+is handed to that channel instead of to the store.
+
+With `defaultBuildPlatform: "all"`, `eas-release build` runs both platforms
+concurrently. iOS is launched first, and the two are isolated: either can fail
+without cancelling or failing the other. Exit codes are aggregated afterwards
+and printed as a summary, so a broken Android build never blocks an iOS
+release.
+
+`eas-release distribute [target]` re-pushes the latest finished Android build to
+its tester channel without rebuilding.
+
+### Per-app Android setup
+
+Each app needs its own, and none of it is shared between apps:
+
+1. Play developer account with the app created (package name matters).
+2. A GCP service account with **Release manager** granted in Play Console under
+   Users and permissions, keyed into `eas.json` as `serviceAccountKeyPath`.
+3. A Firebase project with an Android app registered on the same package name,
+   plus a tester group (`firebase appdistribution:group:create`).
+4. A service account with `roles/firebaseappdistro.admin`, keyed into
+   `distribute.*.android.firebase.serviceAccountKeyPath`.
+5. An Android OAuth client per signing certificate if the app uses Google
+   Sign-In - the Play **app signing** SHA-1 for Play builds, the **upload** key
+   SHA-1 for directly installed APKs.
+
+Keys live in a gitignored `credentials/` directory, never in the repo.

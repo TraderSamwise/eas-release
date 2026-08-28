@@ -1,6 +1,11 @@
-import { spawnSync } from "node:child_process";
-import { ResolvedConfig } from "./config.js";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  PlatformName,
+  ResolvedConfig,
+  TargetDistribution,
+} from "./config.js";
 import { checkRequiredEnv } from "./env.js";
+import { distributeAndroid } from "./firebase.js";
 import { readVersion } from "./version.js";
 
 export type ReleaseTarget = "testflight" | "production";
@@ -16,8 +21,18 @@ export type UpdateOptions = {
   clearCache?: boolean;
 };
 
-export function getProfile(config: ResolvedConfig, target: ReleaseTarget) {
-  return target === "production" ? config.productionProfile : config.testflightProfile;
+/** iOS first, so a single-file change to this order stays deliberate. */
+const PLATFORM_ORDER: PlatformName[] = ["ios", "android"];
+
+export function getProfile(
+  config: ResolvedConfig,
+  target: ReleaseTarget,
+  platform?: PlatformName,
+) {
+  const base =
+    target === "production" ? config.productionProfile : config.testflightProfile;
+  if (!platform) return base;
+  return config.platformProfiles?.[target]?.[platform] ?? base;
 }
 
 export function getChannel(config: ResolvedConfig, target: ReleaseTarget) {
@@ -28,21 +43,94 @@ export function getEnvironment(config: ResolvedConfig, target: ReleaseTarget) {
   return target === "production" ? config.productionEnvironment : config.testflightEnvironment;
 }
 
-export function runBuild(config: ResolvedConfig, target: ReleaseTarget, options: BuildOptions = {}) {
-  const profile = getProfile(config, target);
+export function getDistribution(
+  config: ResolvedConfig,
+  target: ReleaseTarget,
+): TargetDistribution {
+  return config.distribute?.[target] ?? {};
+}
+
+export async function runBuild(
+  config: ResolvedConfig,
+  target: ReleaseTarget,
+  options: BuildOptions = {},
+) {
   const channel = getChannel(config, target);
   assertVersionChannel(config, channel, `build '${target}'`, `version:bump-build ${target}`);
   runPreflight(config, target, config.beforeBuildCommands);
+
   const platform = options.platform ?? config.defaultBuildPlatform;
-  const autoSubmit = options.autoSubmit ?? config.autoSubmit;
-  const args = ["eas", "build", "--profile", profile];
-  if (platform !== "all") {
-    args.push("--platform", platform);
+  const platforms: PlatformName[] =
+    platform === "all" ? [...PLATFORM_ORDER] : [platform];
+
+  if (platforms.length === 1) {
+    await buildPlatform(config, target, platforms[0], options, false);
+    return;
   }
-  if (autoSubmit) {
-    args.push("--auto-submit");
+
+  if (!config.parallelBuilds) {
+    for (const item of platforms) {
+      await buildPlatform(config, target, item, options, false);
+    }
+    return;
   }
-  runYarn(args, config.cwd);
+
+  // Concurrent, but isolated: one platform failing never cancels or fails the
+  // other. Exit codes are aggregated only after both have settled.
+  const results = await Promise.all(
+    platforms.map(async (item) => {
+      try {
+        await buildPlatform(config, target, item, options, true);
+        return { platform: item, error: undefined as Error | undefined };
+      } catch (error) {
+        return {
+          platform: item,
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
+      }
+    }),
+  );
+
+  console.log("\n──────── build summary ────────");
+  for (const result of results) {
+    console.log(
+      result.error
+        ? `${result.platform.padEnd(8)} FAILED  ${result.error.message}`
+        : `${result.platform.padEnd(8)} OK`,
+    );
+  }
+
+  const failed = results.filter((result) => result.error);
+  if (failed.length) {
+    throw new Error(
+      `${failed.map((result) => result.platform).join(", ")} failed; see summary above`,
+    );
+  }
+}
+
+async function buildPlatform(
+  config: ResolvedConfig,
+  target: ReleaseTarget,
+  platform: PlatformName,
+  options: BuildOptions,
+  prefixOutput: boolean,
+) {
+  const profile = getProfile(config, target, platform);
+  const distribution = getDistribution(config, target)[platform];
+
+  // A platform that distributes through its own channel must not also be
+  // handed to `eas submit` - an APK bound for Firebase is not a store upload.
+  const autoSubmit = (options.autoSubmit ?? config.autoSubmit) && !distribution;
+
+  const args = ["eas", "build", "--profile", profile, "--platform", platform];
+  if (autoSubmit) args.push("--auto-submit");
+  if (prefixOutput) args.push("--non-interactive");
+
+  await runYarnAsync(args, config.cwd, prefixOutput ? platform : undefined);
+
+  if (distribution?.firebase) {
+    distributeAndroid(config, distribution.firebase);
+  }
 }
 
 export function runUpdate(config: ResolvedConfig, target: ReleaseTarget, options: UpdateOptions = {}) {
@@ -97,6 +185,45 @@ function runYarn(args: string[], cwd: string) {
   if (result.status !== 0) {
     throw new Error(`${["yarn", ...args].join(" ")} failed`);
   }
+}
+
+function runYarnAsync(args: string[], cwd: string, prefix?: string) {
+  return new Promise<void>((resolvePromise, rejectPromise) => {
+    const child = spawn("yarn", args, {
+      cwd,
+      stdio: prefix ? ["ignore", "pipe", "pipe"] : "inherit",
+    });
+
+    if (prefix) {
+      pipePrefixed(child.stdout, prefix, process.stdout);
+      pipePrefixed(child.stderr, prefix, process.stderr);
+    }
+
+    child.on("error", rejectPromise);
+    child.on("close", (code) => {
+      if (code === 0) resolvePromise();
+      else rejectPromise(new Error(`${["yarn", ...args].join(" ")} exited ${code}`));
+    });
+  });
+}
+
+function pipePrefixed(
+  stream: NodeJS.ReadableStream | null,
+  prefix: string,
+  out: NodeJS.WritableStream,
+) {
+  if (!stream) return;
+  let buffer = "";
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk: string) => {
+    buffer += chunk;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) out.write(`[${prefix}] ${line}\n`);
+  });
+  stream.on("end", () => {
+    if (buffer) out.write(`[${prefix}] ${buffer}\n`);
+  });
 }
 
 function runShell(command: string, cwd: string) {
